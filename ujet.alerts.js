@@ -1,3 +1,4 @@
+var sinsole={data:{chat:{},call:{},Agents:{},summary:{}},DURL:{},summary:{},updates:{}},MyLog=document.querySelector("#MyLog");
 //https://externals.ujet.co/assets/ding_dong_soft-20181214.mp3
 function sec_to_time(sec,shrt){
   shrt=shrt||false;
