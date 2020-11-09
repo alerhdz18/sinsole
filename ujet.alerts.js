@@ -32,6 +32,34 @@ function time_to_sec(str){
   return sec;
 }
 if(window.self === window.top){
+	function loadMedia(src,callback){
+		if(src.split(".").reverse()[0]=="js"){
+		var ele = document.createElement('script');
+			ele.src = src;
+		}else{
+			var ele = document.createElement('link');
+			ele.href = src;
+			ele.rel="stylesheet";
+		}
+		if(typeof callback=="function")
+			ele.onload=callback;
+		document.body.appendChild(ele);
+	}
+var js = [
+			{
+				main:'//ajaxorg.github.io/ace-builds/src-min-noconflict/ace.js',
+				childs:['//ajaxorg.github.io/ace-builds/src-min-noconflict/ext-language_tools.js'],
+			}
+		];
+  js.forEach(ele=>{
+	
+	loadMedia(ele.main,function(){
+		ele.childs.forEach(src=>{
+			loadMedia(src)
+		})
+	})
+  })
+  
 var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document.querySelector("#MyLog");
 (function(XHR) {
   "use strict";
@@ -74,6 +102,7 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
           callback:function(match,rD){
 			  var aux={};
 			  rD.logged_in_agents.forEach(e=>{
+				e.name=e.name.toLowerCase().replace(/[^a-z0-9]/gi,'_');
 				aux[e.name]=e.count;
 			  });
 			  rD.status=aux;
@@ -160,9 +189,9 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 			</div>
 		</div>
 		<ol class="logcontainer"></ol>`)
-		document.body.style.paddingLeft="300px"
+		
 		document.body.insertAdjacentHTML('beforeend',`<style>
-			#MyLog {position: fixed;bottom: 0px;left: 0px;height: 100%;width: 300px;background: white;box-shadow: 0px 0px 10px #ccc;}
+			#MyLog {position: fixed;bottom: 0px;left: 0px;height: 100%;width: 0px;background: white;box-shadow: 0px 0px 10px #ccc;}
 			.logheader .controls{float:right;}
 			#MyLog ol{padding: 2px 5px 2px 25px;font-family: monospace;font-size: 11px;overflow: auto;height: 100%;width: 100%;}
 			#MyLog li{white-space: pre-wrap;padding-top:5px;border-top:1px solid #ccc}
@@ -222,12 +251,21 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 				list-style-position: outside;
 				display:none;
 			}
-			.condition>input {
+			.condition [name=left],.condition [name=right],.condition .ace_editor {
 				display: inline-block;
 				width: calc(50% - 25px);
-				box-shadow:inset 0px 0px 1px 1px #ccc;
-				padding:3px;
+				box-shadow: 0px 0px 1px 1px #ccc;
+				padding: 3px;
 				font-size: 12px;
+				resize: none;
+				height: 20px !important;
+				overflow: hidden;
+				white-space: pre;
+				border: none;
+				line-height: 1;
+			}
+			.condition .ace_editor{
+				margin-bottom: -5px !important;
 			}
 			.condition {
 				padding: 2px 10px 2px 2px;
@@ -291,6 +329,7 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
     border-bottom-right-radius: 5px;
     font-family: unset;
 }
+
 		</style>`)
 		$("#MyLog .logsize").click(function(){
 			$("body").css("padding-left",this.value);
@@ -341,6 +380,69 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 		clear:function(){
 			MyLog.querySelector(".logcontainer").innerHTML='';
 				return this;
+		},
+		getDataKeys(){
+			var ob={};
+			Object.keys(sinsole.data).forEach(ds=>{
+				
+				if(ds=="chat"||ds =="call"){
+				Object.keys(sinsole.data[ds]).forEach(k=>{
+					var type=sinsole.getType(sinsole.data[ds][k]);
+					if("object"==type){
+						Object.keys(sinsole.data[ds][k]).forEach(kl=>{
+							var ltype=sinsole.getType(sinsole.data[ds][k][kl]);
+							if(ltype=='number')
+								ob[ds+"."+k+"."+kl]=ltype;
+						});
+					}else if(type=='number'){
+						ob[ds+"."+k]=type;
+					}
+				 });    
+				}
+			});
+			
+			return [{
+				getCompletions: function(editor, session, pos, prefix, callback) {
+					callback(null,Object.keys(ob).map(function(k){return {caption:k,value:k,meta:ob[k]}}));
+				}
+			}];
+		},
+		setEditor(ele){
+			var editor = ace.edit(ele);
+			ele.style.display='inline-block';
+			
+			editor.completers = sinsole.getDataKeys();
+			editor.setOptions({
+			  enableBasicAutocompletion: true,
+			  enableSnippets: true,
+			  enableLiveAutocompletion: true, 
+			  maxLines: 1, // make it 1 line
+			  autoScrollEditorIntoView: true,
+			  highlightActiveLine: false,
+			  
+			  showGutter: false,
+			});
+			editor.on("paste", function(e) {
+				e.text = e.text.replace(/[\r\n]+/g, " ");
+			});
+			// make mouse position clipping nicer
+			editor.renderer.screenToTextCoordinates = function(x, y) {
+				var pos = this.pixelToScreenCoordinates(x, y);
+				return this.session.screenToDocumentPosition(
+					Math.min(this.session.getScreenLength() - 1, Math.max(pos.row, 0)),
+					Math.max(pos.column, 0)
+				);
+			};
+			var textarea=$("#"+ele.id.replace("editor_",""));
+			textarea.hide();
+			editor.getSession().on('change', function(){
+			  textarea.val(editor.getSession().getValue());
+			});
+			// disable Enter Shift-Enter keys
+			editor.commands.bindKey("Enter|Shift-Enter", "null");
+			editor.getSession().setUseWorker(false);
+			editor.setTheme("ace/theme/clouds");
+			editor.getSession().setMode("ace/mode/javascript");
 		},
 		notify:{
 			rules:[
@@ -425,8 +527,8 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 					<div class="message"><b>Message:</b><br/><textarea placeholder="Message" name="message">${rule.message}</textarea></div>
 					<h5 class="showhidecond">Conditions</h5> 
 					<ol class="conditions">`;
-					rule.conditions.forEach(cond=>{
-						lirule+=noty.addCondition(cond);
+					rule.conditions.forEach((cond,ind)=>{
+						lirule+=noty.addCondition(cond,rule.id,ind);
 					});
 					lirule+=`</ol>
 					<div class="action">
@@ -436,7 +538,9 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 					</li>`;
 					rules.insertAdjacentHTML('beforeend',lirule);
 				})
-				
+				panel.querySelectorAll('[ace][id*="editor_"]:not(.ace_editor)').forEach(ele=>{
+					sinsole.setEditor(ele)
+				});
 				panel.querySelectorAll(".showhidecond").forEach(e=>{
 					var papa=e.parentElement;
 					e.addEventListener('click',function(){
@@ -448,25 +552,45 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 			addRule(){
 				
 			},
-			addCondition(cond,ruleIndex){
+			
+			addCondition(cond,ruleIndex,condIndex){
+				var noty=this;
 				var opers=['>','>=','<','<=','<>','='];
 				cond=$.extend({left:"",oper:">",right:""},cond);
                 
+				if(typeof condIndex=="undefined"){
+					if(typeof ruleIndex !=="undefined"){
+						var li=document.querySelector("#notilist li[rule-id='"+ruleIndex+"'] .conditions");
+						condIndex=li.childElementCount;
+					}else{
+						condIndex="_";
+					}
+					
+				}
+				
 				var optHtml=opers.map(o=>{
 					return `<option value="${o}" ${cond.oper==o?"selected":""}>${sinsole.htmlEntities(o)}</option>`;
 				}).join("");
+				
 				var html=`<li class="condition">
-					<input name="left" value="${cond.left}"> 
+					<textarea id="${ruleIndex}_${condIndex}_left" name="left">${cond.left}</textarea>
+					<div style="display:none" ace id="editor_${ruleIndex}_${condIndex}_left">${cond.left}</div>
 					<select name="oper">
 						${optHtml}
 					</select>
-					<input name="right" value="${cond.right}">
+					<textarea id="${ruleIndex}_${condIndex}_right" name="right">${cond.right}</textarea>
+					<div style="display:none" ace id="editor_${ruleIndex}_${condIndex}_right">${cond.right}</div>
 					<button class="delcond" onclick="sinsole.notify.delCondition(this)">x</button>
 					</li>`;
 				if(typeof ruleIndex !=="undefined"){
 					var li=document.querySelector("#notilist li[rule-id='"+ruleIndex+"'] .conditions")
 					if(li!==null){
-						li.insertAdjacentHTML('beforeend',html)
+						
+						li.insertAdjacentHTML('beforeend',html);
+						li.querySelectorAll('[ace][id*="editor_"]:not(.ace_editor)').forEach(ele=>{
+							sinsole.setEditor(ele)
+						})
+						
 					}
 				}
 				return html;
@@ -600,5 +724,6 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 		sinsole.notify.rules=ru;
 	}
 	sinsole.notify.renderPanel();
+	ace.require("ace/ext/language_tools")
 }
 }
