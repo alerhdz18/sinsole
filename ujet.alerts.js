@@ -1,4 +1,4 @@
-var sinsole={data:{chat:{},call:{},Agents:{},summary:{}},DURL:{},summary:{},updates:{}},MyLog=document.querySelector("#MyLog");
+//this is it
 //https://externals.ujet.co/assets/ding_dong_soft-20181214.mp3
 function sec_to_time(sec,shrt){
   shrt=shrt||false;
@@ -60,7 +60,27 @@ var js = [
 	})
   })
   
-var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document.querySelector("#MyLog");
+var sinsole={
+	data:{
+		Agents:{},
+		call:{},
+		chat:{},
+		summary:{},
+		calls_over:function(sec){
+			return this.call_queue.filter(e=>Date.now()-new Date(e.connected_at).getTime()>sec*1000).length;
+		},
+		calls_longest:function(){
+			var longest_call=Math.max.apply(null,this.call_queue.filter(e=>e.type!="DirectCall"&&isNumeric(e.call_duration)).map(a=>{ return (Date.now()-new Date(a.connected_at))/1000 }));
+			return sec_to_time(longest_call);
+		},
+		chats_over:function(sec){
+			return this.chat_queue.filter(e=>Date.now()-new Date(e.assigned_at).getTime()>sec*1000).length;
+		},
+		chats_longest:function(){
+			var longest_chat=Math.max.apply(null,this.chat_queue.filter(e=>isNumeric(e.chat_duration)).map(a=>{ return (Date.now()-new Date(a.assigned_at))/1000 }));
+			return sec_to_time(longest_chat);
+		},
+},DURL:{}},MyLog=document.querySelector("#MyLog");
 (function(XHR) {
   "use strict";
   var open = XHR.prototype.open;
@@ -118,6 +138,28 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 					sinsole.update.agent_statuses()
 				}
 				
+			  }
+          },
+      },{
+          'reg':/\/v1\/(calls|chats)\?/ig,
+          callback:function(match,rD){
+			  if(match=="calls"){
+				  rD=rD.map(e=>{
+					  e.call_duration=(Date.now()-new Date(e.connected_at).getTime())/1000;
+					  return e;
+				  });
+			  }else{
+				  rD=rD.map(e=>{
+					  e.chat_duration=(Date.now()-new Date(e.assigned_at).getTime())/1000;
+					  return e;
+				  });
+			  }
+			  
+              sinsole.data[match=="calls"?'call_queue':'chat_queue']=rD;
+			  if(sinsole.update){
+				if(!url.includes("manual")){
+					sinsole.update.queue(match=="calls"?"chats":"calls");
+				}
 			  }
           },
       }];
@@ -199,16 +241,17 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 			.showpanel{
 				display:none;
 			}
-			.mini {
+			.mini #notipanel {
 				height: 37px;
 				top: revert !important;
 				width: 61px !important;
 				padding: 0px !important;
+				background:#28b351 !important;
 			}
-			.mini>h3,.mini>#notilist,.mini .hidepanel {
+			.mini #notipanel>h3,.mini #notipanel>#notilist,.mini #notipanel .hidepanel {
 				display:none
 			}
-			.mini .showpanel{
+			.mini #notipanel .showpanel{
 				display:inline-block
 			}
 			 ::-webkit-scrollbar {
@@ -249,7 +292,12 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 			.conditions {
 				padding: 2px 5px 2px 20px;
 				list-style-position: outside;
-				display:none;
+				max-height: 0px;
+				opacity: 0;
+				overflow: hidden;
+				transition-property: max-height,opacity;
+				transition-duration: 0.2s,0.2s;
+				transition-delay: 0s, .3s;
 			}
 			.condition [name=left],.condition [name=right],.condition .ace_editor {
 				display: inline-block;
@@ -268,7 +316,7 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 				margin-bottom: -5px !important;
 			}
 			.condition {
-				padding: 2px 10px 2px 2px;
+				padding: 2px 30px 2px 2px;
 				position:relative;
 			}
 			#notilist{
@@ -317,17 +365,40 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
     border-radius:4px;
     
 }
-.condition .delcond{
+.condition .condinfo{
+    position: absolute;
+	top:0px;
 	right: 0px;
     padding: 1px 1px;
-    background: red;
+	width:25px;
+}
+body.maxpanel {
+    margin-right: 500px;
+}
+.condinfo .delcond {
+    padding: 0px 2px;
+    line-height: 0.8;
+    font-family: monospace;
+    background: #FF5722;
     color: white;
-    position: absolute;
-    line-height: 1;
-    margin-top: 2px;
-    border-top-right-radius: 5px;
-    border-bottom-right-radius: 5px;
-    font-family: unset;
+    border-radius: 50%;
+    box-shadow: 1px 1px 3px #b53d17;
+}
+.table.ongoing-chats-table,.table.ongoing-calls-table {
+    padding: 0px;
+}
+.ongoing-chats-table td,.ongoing-calls-table td{
+    padding:0px !important;
+    margin: 0px !important;
+}
+.ongoing-chats-table td .table-content,.ongoing-calls-table td .table-content{
+    padding:0px 5px !important;
+}
+.ongoing-chats-table td .table-content button.actions,.ongoing-calls-table td .table-content button.actions{
+    height:10px!important;
+}
+.ongoing-chats-table tr:nth-child(even),.ongoing-calls-table tr:nth-child(even){
+    background:#eee;
 }
 
 		</style>`)
@@ -447,30 +518,36 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 		notify:{
 			rules:[
 				{
-					id:'base1',
-					conditions:[
-						{left:"call.service_level.current_percent",oper:"<",right:"call.service_level.target_percent"},
-						{left:"call.status.available",oper:">=",right:"2"},
+					"id": "base1",
+					"conditions": [
+					  {
+						"left": "chats_over(700)",
+						"oper": ">",
+						"right": "0"
+					  }
 					],
-					message:'SL ${call.service_level.current_percent.toFixed(2)}%, ${call.status.available} Agents Available',
-					title:'SL + Available',
-					active:true,
-					noti:false,
-					wait:30000,
-					noti_show_at:0,
+					"message": "Chats over target: ${_.chats_over(700)}.\nMax chat Durations: ${_.chats_longest()}",
+					"title": "Chat AHT",
+					"active": true,
+					"noti": false,
+					"wait": 30000,
+					"noti_show_at": 0
 				},
 				{
-					id:'base2',
-					conditions:[
-						{left:"chat.chats_per_agent",oper:">=",right:"1.8"},
-						{left:"chat.status.available",oper:">",right:"3"}
+					"id": "base2",
+					"conditions": [
+					  {
+						"left": "calls_over(400)",
+						"oper": ">",
+						"right": "0"
+					  }
 					],
-					message: 'SL ${chat.chats_per_agent.toFixed(2)}, ${call.status.available} Agents Available',
-					title:'Available Agents/Concurrency',
-					active:true,
-					noti:false,
-					wait:30000,
-					noti_show_at:0,
+					"message": "Calls over target: ${_.calls_over(400)}.\nMax call Durations: ${_.calls_longest()}",
+					"title": "Call AHT",
+					"active": true,
+					"noti": {},
+					"wait": 30000,
+					"noti_show_at": 1614292448207
 				}
 			],
 			evaluate(i){
@@ -486,11 +563,15 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 					}
 					var cvalid=false;
 					try{
+						
 						cvalid=(eval(left+c.oper+right))
 					}catch(er){}
 					valid=valid&&cvalid;
 				});
 				return valid;
+			},
+			renderRule(index){
+				this.rules[index];
 			},
 			renderPanel(){
 				var noty=this;
@@ -511,11 +592,14 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 					panel=document.querySelector("#notipanel");
 					
 					panel.querySelector(".hidepanel").addEventListener("click",function(){
-						panel.classList.add("mini")
+						document.body.classList.add("mini");
+						document.body.classList.remove("maxpanel")
 					});
 					panel.querySelector(".showpanel").addEventListener("click",function(){
-						panel.classList.remove("mini")
+						document.body.classList.remove("mini");
+						document.body.classList.add("maxpanel")
 					});
+					document.body.classList.add("mini")
 				}
 				var rules=panel.querySelector("#notilist");
 				rules.innerHTML='';
@@ -537,15 +621,23 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 					</div>
 					</li>`;
 					rules.insertAdjacentHTML('beforeend',lirule);
-				})
+				});
 				panel.querySelectorAll('[ace][id*="editor_"]:not(.ace_editor)').forEach(ele=>{
 					sinsole.setEditor(ele)
 				});
 				panel.querySelectorAll(".showhidecond").forEach(e=>{
 					var papa=e.parentElement;
 					e.addEventListener('click',function(){
-						var display=papa.querySelector(".conditions").style.display;
-						papa.querySelector(".conditions").style.display=(display=="block"?"none":"block");
+						var cnd=papa.querySelector(".conditions");
+						var display=cnd.style.opacity==0;
+						if(display){
+							cnd.style["max-height"]='100px';
+							cnd.style["opacity"]=1;
+						}else{
+							cnd.style["max-height"]='0px';
+							cnd.style["opacity"]=0;
+						}
+						
 					})
 				})
 			},
@@ -580,7 +672,11 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 					</select>
 					<textarea id="${ruleIndex}_${condIndex}_right" name="right">${cond.right}</textarea>
 					<div style="display:none" ace id="editor_${ruleIndex}_${condIndex}_right">${cond.right}</div>
-					<button class="delcond" onclick="sinsole.notify.delCondition(this)">x</button>
+					<div class="testarea"></div>
+					<div class="condinfo">
+						<button class="delcond" onclick="sinsole.notify.delCondition(this)">⁄</button>
+						<span class="test"></span>
+					</div>
 					</li>`;
 				if(typeof ruleIndex !=="undefined"){
 					var li=document.querySelector("#notilist li[rule-id='"+ruleIndex+"'] .conditions")
@@ -608,7 +704,7 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 				};
 			},
 			delCondition(ele){
-				var li=ele.parentElement;
+				var li=ele.parentElement.parentElement;
 				li.parentNode.removeChild(li);
 			},
 			saveRule(ruleIndex){
@@ -641,14 +737,14 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 			compileText(str){
 				var compiled=str;
 				const regex = /\$\{([\w\(\)\.\_\+\-\/]+)\}/gmi;
-				var dregex=new RegExp('^('+Object.keys(sinsole.data).join("|")+')\.(.*)$','g')
+				var dregex=new RegExp('^('+Object.keys(sinsole.data).join("|")+'|\_)\.(.*)$','g')
 				let m;
 				while ((m = regex.exec(str)) !== null) {
 					if (m.index === regex.lastIndex) {
 						regex.lastIndex++;
 					}
 					try{
-						var value=eval(m[1].replace(dregex,'sinsole.data.$1.$2'));
+						var value=eval(m[1].replace(dregex,'sinsole.data.$1.$2').replace('._.','.'));
 						compiled=compiled.replace(m[0],value)
 					}catch(er){}
 				}
@@ -716,6 +812,13 @@ var sinsole={data:{Agents:{},call:{},chat:{},summary:{}},DURL:{}},MyLog=document
 				  $.get("/v1/agent_statuses/summary?channel=voice_call&m=manual")
 				if(type=="chat"||type=="both")
 				  $.get("/v1/agent_statuses/summary?channel=chat&m=manual")
+			},
+			queue:function(type){
+				type=typeof type =="undefined"?"both":type;
+				if(type=="calls"||type=="both")
+					$.get('/v1/calls?sort_column=connected_at&sort_direction=asc&status[]=assigned&status[]=ongoing&status[]=va_assigned&m=manual');
+				if(type=="chats"||type=="both")
+					$.get('/v1/chats?sort_column=assigned_at&sort_direction=asc&status[]=assigned&status[]=ongoing&status[]=va_assigned&m=manual');
 			}
 		}
 	});
