@@ -400,7 +400,9 @@ body.maxpanel {
 .ongoing-chats-table tr:nth-child(even),.ongoing-calls-table tr:nth-child(even){
     background:#eee;
 }
-
+.ujet-dropdown-menu_panel{
+    position:relative;
+}
 		</style>`)
 		$("#MyLog .logsize").click(function(){
 			$("body").css("padding-left",this.value);
